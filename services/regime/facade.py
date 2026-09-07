@@ -134,7 +134,7 @@ class RegimeService:
         row = {
             **label,
             "regime_changed_from_previous": regime_changed,
-            "fetch_timestamp": dt.datetime.utcnow().isoformat(timespec="seconds") + "Z",
+            "fetch_timestamp": dt.datetime.now(dt.UTC).isoformat(timespec="seconds") + "Z",
         }
         _upsert_log_rows([row])
         result["persisted"] = True
@@ -167,7 +167,7 @@ class RegimeService:
         transitions = regime_transitions(df)
         change_dates = {t["date"] for t in transitions}
 
-        now_iso = dt.datetime.utcnow().isoformat(timespec="seconds") + "Z"
+        now_iso = dt.datetime.now(dt.UTC).isoformat(timespec="seconds") + "Z"
         rows: list[dict] = []
         for ts, r in df.iterrows():
             d = pd.Timestamp(ts).date().isoformat()

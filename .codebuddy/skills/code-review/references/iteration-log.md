@@ -38,6 +38,16 @@
   - [分级] 维持"devDeps 漏洞降一档为 P2"口径（第 3 次验证一致，建议固化）
 - **已落地改动**：仅追加本记录；清单修改待用户确认
 
+### 2026-09-08 OptionLab 整改期补充（第 1-4 批修复中的评审校准）
+- **输入**：模式=<整改（四批）>；范围=<同 2026-09-07 全库回顾>；变更类型=<修复验证>
+- **误报**：core/market 各文件头 "Dependencies DOWNWARD: services.market.charts" 被判为"系统性过时 docstring" → 实际仓库约定是 UPWARD=本文件依赖项 / DOWNWARD=消费方（与 utils/rate_limit.py 一致），大部分文件头是正确的；仅 data_context.py 存在混列。原因：**未先核对仓库自身约定就按通用分层直觉判 P3**
+- **遗漏**：① e2e conftest 的 FAKE_REGIME_HISTORY 与真实服务契约形状不匹配 → smoke 测试时序竞态 flake（评审时只扫了测试文件的存在性，未核对 mock 形状与生产契约一致性）；② 已提交的 site/ 构建产物已经漂移（static/option_pricing_matrix.js），评审发现了"无门禁"风险但未抽查"当前是否已漂移"；③ config 选择器提供 QE 频率但管道从不生成，评审只判了"口径不一致"（P3），实际是用户可触发的功能性缺失
+- **改进建议**：
+  - [规则] security/maintainability-checklist 增补：评审 docstring 类"契约漂移"前，先在仓库内找同一约定的 ≥2 个正确样例校准语义，避免按直觉误判
+  - [模式] "mock 形状与生产契约一致性"检查写入 architecture-checklist：e2e fixture 应镜像真实路由返回形状（含 status 键），否则产生时序竞态 flake
+  - [分级] "用户可选选项在管道中缺失"应从 P3 上调至 P2（功能性缺失而非文档漂移）
+- **已落地改动**：仅追加本记录
+
 ### 2026-09-07 OptionLab 全库回顾
 - **输入**：模式=<全库>；范围=<app.py, routes, services, core, data_pipeline, utils, scripts, static, templates, tests, site>；语言=<Python + JavaScript（推断）>；框架=<Flask + HTMX/Alpine + matplotlib + SQLite + yfinance；vitest/Playwright（推断）>；变更类型=<全库健康度>
 - **覆盖度**（全库模式）：深审=data_pipeline、services（32 文件全读）、期权模拟热路径（expiry.py/black_scholes/simulation/routes/options）、core/market（抽样）；跨切面 grep 扫描 100% 文件（static/templates/routes/utils/app.py 由跨切面代理覆盖）；scripts 仅 grep 扫描未深审；archive 未评审

@@ -35,6 +35,25 @@ def _fig_to_base64(fig) -> str:
     return result
 
 
+def _pnl_curve(legs, lo, hi, n=2000):
+    """Total P&L at expiration over a price grid.
+
+    legs: iterable of ``(option_type, strike, premium, qty)`` with
+    ``option_type`` ∈ {LC, SC, LP, SP}. Single source of truth for the
+    intrinsic-minus-premium closed loop previously duplicated in _plot_pnl,
+    _find_breakevens and _position_sizing.
+    """
+    prices = np.linspace(lo, hi, n)
+    total_pnl = np.zeros_like(prices)
+    for opt, K, premium, qty in legs:
+        is_call = opt in ("LC", "SC")
+        is_long = opt in ("LC", "LP")
+        sign = 1.0 if is_long else -1.0
+        intrinsic = np.maximum(prices - K, 0) if is_call else np.maximum(K - prices, 0)
+        total_pnl += (intrinsic - premium) * sign * qty * 100
+    return prices, total_pnl
+
+
 def _plot_pnl(positions, spots):
     """Plot payoff diagram at expiration."""
     main_ticker = positions[0]["ticker"]
@@ -43,24 +62,12 @@ def _plot_pnl(positions, spots):
     strikes = [p["strike"] for p in positions]
     lo = min(min(strikes), spot) * 0.85
     hi = max(max(strikes), spot) * 1.15
-    prices = np.linspace(lo, hi, 500)
-
-    total_pnl = np.zeros_like(prices)
-    for pos in positions:
-        is_call = pos["option_type"] in ("LC", "SC")
-        is_long = pos["option_type"] in ("LC", "LP")
-        sign = 1 if is_long else -1
-        K = pos["strike"]
-        premium = pos["price"]
-        qty = pos["quantity"]
-
-        if is_call:
-            intrinsic = np.maximum(prices - K, 0)
-        else:
-            intrinsic = np.maximum(K - prices, 0)
-
-        leg_pnl = (intrinsic - premium) * sign * qty * 100
-        total_pnl += leg_pnl
+    prices, total_pnl = _pnl_curve(
+        [(p["option_type"], p["strike"], p["price"], p["quantity"]) for p in positions],
+        lo,
+        hi,
+        n=500,
+    )
 
     fig, ax = plt.subplots(figsize=(10, 5))
     ax.plot(prices, total_pnl, color="#3b82f6", linewidth=2)
@@ -179,23 +186,11 @@ def _risk_breakdown(positions, spots, totals):
 
 def _find_breakevens(greeks_positions, spot):
     """Approximate breakevens from PnL curve via zero-crossing detection."""
-    lo = spot * 0.5
-    hi = spot * 1.5
-    prices = np.linspace(lo, hi, 2000)
-    total_pnl = np.zeros_like(prices)
-
-    for pos in greeks_positions:
-        is_call = pos["type"] in ("LC", "SC")
-        is_long = pos["type"] in ("LC", "LP")
-        sign = 1 if is_long else -1
-        K = pos["strike"]
-        premium = pos["premium"]
-        qty = pos["qty"]
-        if is_call:
-            intrinsic = np.maximum(prices - K, 0)
-        else:
-            intrinsic = np.maximum(K - prices, 0)
-        total_pnl += (intrinsic - premium) * sign * qty * 100
+    prices, total_pnl = _pnl_curve(
+        [(p["type"], p["strike"], p["premium"], p["qty"]) for p in greeks_positions],
+        spot * 0.5,
+        spot * 1.5,
+    )
 
     breakevens = []
     for i in range(len(total_pnl) - 1):
@@ -207,23 +202,11 @@ def _find_breakevens(greeks_positions, spot):
 
 def _position_sizing(greeks_positions, spot, account_size, max_risk_pct):
     """Compute position sizing recommendation based on max risk per contract."""
-    lo = spot * 0.5
-    hi = spot * 1.5
-    prices = np.linspace(lo, hi, 2000)
-    total_pnl = np.zeros_like(prices)
-
-    for pos in greeks_positions:
-        is_call = pos["type"] in ("LC", "SC")
-        is_long = pos["type"] in ("LC", "LP")
-        sign = 1 if is_long else -1
-        K = pos["strike"]
-        premium = pos["premium"]
-        qty = pos["qty"]
-        if is_call:
-            intrinsic = np.maximum(prices - K, 0)
-        else:
-            intrinsic = np.maximum(K - prices, 0)
-        total_pnl += (intrinsic - premium) * sign * qty * 100
+    _, total_pnl = _pnl_curve(
+        [(p["type"], p["strike"], p["premium"], p["qty"]) for p in greeks_positions],
+        spot * 0.5,
+        spot * 1.5,
+    )
 
     max_loss = float(np.min(total_pnl))
     if max_loss >= 0:

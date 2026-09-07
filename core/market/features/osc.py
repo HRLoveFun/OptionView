@@ -41,7 +41,9 @@ def osc(bars: pd.DataFrame, *, on_effect: bool = True) -> pd.Series | None:
         else:
             result = (bars["High"] - bars["Low"]) / bars["LastClose"] * 100
         result.name = "Oscillation"
-        return result.dropna()
+        # dropna() alone keeps ±inf from a zero LastClose (bad data); inf would
+        # poison downstream percentile / scatter computations.
+        return result.replace([np.inf, -np.inf], np.nan).dropna()
     except Exception as e:
         logger.error("Error calculating oscillation: %s", e)
         return None
@@ -54,7 +56,7 @@ def osc_high(bars: pd.DataFrame) -> pd.Series | None:
     try:
         result = (bars["High"] / bars["LastClose"] - 1) * 100
         result.name = "Osc_high"
-        return result.dropna()
+        return result.replace([np.inf, -np.inf], np.nan).dropna()
     except Exception as e:
         logger.error("Error calculating osc_high: %s", e)
         return None
@@ -67,7 +69,7 @@ def osc_low(bars: pd.DataFrame) -> pd.Series | None:
     try:
         result = (bars["Low"] / bars["LastClose"] - 1) * 100
         result.name = "Osc_low"
-        return result.dropna()
+        return result.replace([np.inf, -np.inf], np.nan).dropna()
     except Exception as e:
         logger.error("Error calculating osc_low: %s", e)
         return None

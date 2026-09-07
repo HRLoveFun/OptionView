@@ -8,7 +8,7 @@ date, row counts, NaN counts, and basic freshness checks. Used by the
 from __future__ import annotations
 
 import os
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from data_pipeline.repos import fetch_ticker_inventory
@@ -70,7 +70,7 @@ def overall_summary() -> dict[str, Any]:
 
     return {
         "status": status,
-        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "generated_at": datetime.now(UTC).isoformat() + "Z",
         "ticker_count": len(per),
         "total_rows": total_rows,
         "stale_tickers": stale,

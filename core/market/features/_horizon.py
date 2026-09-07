@@ -16,6 +16,7 @@ Dependencies DOWNWARD:
 from __future__ import annotations
 
 import datetime as dt
+import logging
 
 import pandas as pd
 
@@ -49,7 +50,10 @@ def apply_horizon(
             if end_ts.tz is None:
                 end_ts = end_ts.tz_localize(idx.tz)
         return series[(idx >= start_ts) & (idx <= end_ts)]
-    except Exception:
+    except Exception as e:
+        # Fail open, but loudly: silently returning the unfiltered series makes
+        # the horizon filter disappear without a trace.
+        logging.getLogger(__name__).warning("apply_horizon filter failed (%s) — returning unfiltered series", e)
         return series
 
 

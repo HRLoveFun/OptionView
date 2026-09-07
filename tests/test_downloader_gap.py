@@ -179,6 +179,12 @@ class TestManualUpdateGapScan:
         when it falls within `GAP_SCAN_DAYS`."""
         end = dt.date.today()
         old_gap = end - dt.timedelta(days=15)  # within default GAP_SCAN_DAYS=30
+        # Walk back to the nearest business day: when `end - 15d` lands on a
+        # weekend, bdate_range never contains it, the gap scan finds nothing,
+        # and the download never fires (date-dependent flake, e.g. 2026-09-07
+        # Monday → 2026-08-23 Sunday).
+        while old_gap.weekday() >= 5:
+            old_gap -= dt.timedelta(days=1)
 
         # Seed every business day in [end-30, end] except `old_gap`.
         scan_start = end - dt.timedelta(days=30)

@@ -18,10 +18,9 @@ from matplotlib.ticker import FuncFormatter, LogLocator, NullFormatter
 
 from core._shared.plotting import COLOR_BEAR, COLOR_BULL, COLOR_VOL, encode_figure, new_figure
 from core._shared.types import FREQUENCY_LABELS
+from core.market.features.volatility import VOLATILITY_WINDOWS
 
 logger = logging.getLogger(__name__)
-
-VOLATILITY_WINDOWS = {"D": 5, "W": 5, "ME": 21, "QE": 63}
 
 
 def render_volatility(daily_close, volatility, bull_bear_segs, ticker: str, frequency: str) -> str | None:

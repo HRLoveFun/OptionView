@@ -175,14 +175,6 @@ def upsert_raw_prices(
     df_new.index = pd.DatetimeIndex(df_new.index).tz_localize(None)
     df_new["date"] = df_new.index.date
 
-    # Load existing for comparison (inclusive end)
-    df_old = fetch_df(
-        "SELECT * FROM raw_prices WHERE ticker=? AND date>=? AND date<=?",
-        (ticker, start.isoformat(), end.isoformat()),
-    )
-    if not df_old.empty:
-        df_old = df_old.rename(columns={"adj_close": "Adj_Close"})
-
     rows = []
     for _d, row in df_new.iterrows():
         date_str = row["date"].isoformat()

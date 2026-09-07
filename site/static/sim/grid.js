@@ -26,6 +26,17 @@ function _parseList(str, fallback) {
   return out.length ? out : fallback;
 }
 
+// Equivalent of Python's f"{x:g}" (6 significant digits, trailing zeros
+// stripped) so combo labels match core/options/simulation/expiry.py exactly.
+// The former code leaked the Python format spec into the template string and
+// printed the literal "30g% IV".
+function _fmtG(x) {
+  if (!Number.isFinite(x)) return String(x);
+  const s = x.toPrecision(6);
+  if (s.includes('e') || s.includes('E')) return String(Number(s));
+  return s.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
+}
+
 function _defaultLadder(spot) {
   const moneys = [0.85, 0.9, 0.95, 1.0, 1.05, 1.1, 1.15];
   return moneys.map((m) => Math.round(spot * m * 100) / 100);
@@ -133,7 +144,7 @@ export function simulateExpiry(opts) {
         dte: exp.dte,
         expiry: exp.date,
         iv_pct: Math.round(entryIv * 100 * 10000) / 10000,
-        label: `${exp.dte}D · ${entryIv * 100}g% IV`,
+        label: `${exp.dte}D · ${_fmtG(entryIv * 100)}% IV`,
         entry_iv_pct: Math.round(entryIv * 100 * 10000) / 10000,
         forward_iv_pct: Math.round(fwdIv * 100 * 10000) / 10000,
       });
@@ -141,7 +152,6 @@ export function simulateExpiry(opts) {
   }
 
   const intrinsicAt = (p, k) => (isCall ? Math.max(p - k, 0) : Math.max(k - p, 0));
-  const intrinsicSpot = intrinsicAt(S, 0); // placeholder, set per-strike below
 
   const results = [];
   for (const K of KS) {
@@ -171,8 +181,17 @@ export function simulateExpiry(opts) {
       let pop;
       if (fwdIv > 0 && combo.dte > 0 && S > 0) {
         const T = combo.dte / 365;
-        const d2 = (Math.log(S / breakeven) + (r - 0.5 * fwdIv * fwdIv) * T) / (fwdIv * Math.sqrt(T));
-        const pAbove = isCall ? normCdf(d2) : 1 - normCdf(d2);
+        // CONSTRAINT: mirror expiry.py::_prob_above — a non-positive strike
+        // level is outside the log-normal domain (deep-ITM puts where
+        // premium > K give breakeven <= 0, and Math.log(S / breakeven) would
+        // be NaN). call: P(S_T > level) = 1; put: 0.
+        let pAbove;
+        if (breakeven <= 0) {
+          pAbove = 1;
+        } else {
+          const d2 = (Math.log(S / breakeven) + (r - 0.5 * fwdIv * fwdIv) * T) / (fwdIv * Math.sqrt(T));
+          pAbove = isCall ? normCdf(d2) : 1 - normCdf(d2);
+        }
         pop = side === 'long' ? pAbove : 1 - pAbove;
       } else {
         pop = 0;

@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import asdict
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 
 from core.portfolio import Position, aggregate_greeks, attribute_pnl
@@ -171,7 +171,7 @@ def portfolio_snapshot() -> dict[str, Any]:
     agg = aggregate_greeks(positions, spots)
     return {
         "status": "ok",
-        "as_of": datetime.utcnow().isoformat() + "Z",
+        "as_of": datetime.now(UTC).isoformat() + "Z",
         "positions": out_positions,
         "aggregate": agg,
         "spots": spots,

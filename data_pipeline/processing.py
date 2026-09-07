@@ -84,7 +84,10 @@ def process_frequencies(ticker: str, start: dt.date | None = None, end: dt.date 
     daily.index = pd.to_datetime(daily.index).tz_localize(None)
 
     total_rows = 0
-    for freq, rule in ("D", "D"), ("W", "W-FRI"), ("ME", "ME"):
+    # QE is advertised in the config-tab frequency selector and accepted by
+    # validation; the pipeline used to skip it, making /api reads for
+    # frequency=QE silently empty.
+    for freq, rule in ("D", "D"), ("W", "W-FRI"), ("ME", "ME"), ("QE", "QE"):
         if freq == "D":
             agg = daily.copy()
         else:

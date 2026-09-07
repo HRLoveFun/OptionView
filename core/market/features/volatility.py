@@ -119,7 +119,12 @@ def hv_context(daily_close: pd.Series) -> dict | None:
         if len(hv_20_series) >= 60:
             recent_252 = hv_20_series.iloc[-252:]
             current_hv20 = hv_dict["hv_20d"]
-            hv_dict["hv_rank"] = float((recent_252 <= current_hv20).sum() / len(recent_252))
+            if current_hv20 is not None and np.isfinite(current_hv20):
+                hv_dict["hv_rank"] = float((recent_252 <= current_hv20).sum() / len(recent_252))
+            else:
+                # A NaN current HV compared against anything yields all-False →
+                # rank 0 ("historically lowest vol"), which is badly misleading.
+                hv_dict["hv_rank"] = None
             hv_dict["hv_252d_min"] = float(recent_252.min())
             hv_dict["hv_252d_max"] = float(recent_252.max())
         else:

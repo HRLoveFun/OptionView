@@ -16,6 +16,11 @@ def manual_update(ticker: str, days: int = 7) -> bool:
 
     Skips if the same ticker was updated within _UPDATE_COOLDOWN seconds.
     Returns True if the pipeline ran, False if skipped due to cooldown.
+
+    NOTE: the cooldown lock is taken BEFORE the pipeline runs and is only
+    cleared on an exception — a pipeline that returns False (stage failure)
+    keeps the cooldown, acting as a deliberate ~60s back-off before the next
+    retry (see tests/test_concurrency.py::test_failed_pipeline_clears_cooldown).
     """
     if not is_valid_ticker_format(ticker):
         logger.debug("Skipping manual_update for invalid ticker: %r", ticker)

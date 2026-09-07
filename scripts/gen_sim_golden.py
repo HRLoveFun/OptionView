@@ -214,6 +214,10 @@ def main() -> None:
         ("call_long_atm", 100, [95, 100, 105], [7, 30], [0.2, 0.3], "call", "long", 0.05, 1, 100),
         ("put_short_otm", 100, [95, 100], [30], [0.3], "put", "short", 0.05, 2, 100),
         ("call_long_deep", 100, [80, 90, 100], [1, 365], [0.001, 0.5], "call", "long", 0.05, 1, 100),
+        # Deep-ITM put where premium > K: breakeven <= 0 exercises the
+        # _prob_above `level <= 0` guard (log(S/level) would be NaN). The JS
+        # mirror historically lacked this branch and produced NaN PoP.
+        ("put_deep_itm_negative_rate", 10, [100], [365], [0.5], "put", "long", -0.05, 1, 100),
     ]
     for name, spot, strikes, exps, ivs, otype, side, r, qty, mult in sim_specs:
         expiries = [{"dte": d, "date": (datetime.date.today() + datetime.timedelta(days=d)).isoformat()} for d in exps]

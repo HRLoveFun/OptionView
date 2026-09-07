@@ -9,9 +9,7 @@ from services.options.chain import OptionsChainService
 from utils.date_helpers import exclusive_month_end
 
 from .assessment import _generate_assessment
-from .sizing import calculate_position_size
 from .statistical import _generate_statistical_analysis
-from .summary import generate_summary_analysis
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +19,12 @@ class AnalysisService:
 
     @staticmethod
     def generate_complete_analysis(form_data):
+        """One-shot orchestration of all slices.
+
+        WHY kept despite having no production caller (streaming dispatch covers
+        the same ground per-slice): tests/test_nvda_analysis.py exercises the
+        full pipeline through it. Remove together with that test's migration.
+        """
         """Generate complete analysis including market review, statistical analysis, and assessment."""
         try:
             end_exclusive = exclusive_month_end(form_data.get("parsed_end_time"))
@@ -117,13 +121,3 @@ class AnalysisService:
         except Exception as e:
             logger.error("options_chain slice failed for %s: %s", ticker, e, exc_info=True)
             return {"oc_error": str(e)}
-
-    @staticmethod
-    def calculate_position_size(
-        account_size: float, max_risk_pct: float, max_loss_per_contract: float, strategy_type: str
-    ) -> dict | None:
-        return calculate_position_size(account_size, max_risk_pct, max_loss_per_contract, strategy_type)
-
-    @staticmethod
-    def generate_summary_analysis(tickers: list, results_by_ticker: dict) -> dict:
-        return generate_summary_analysis(tickers, results_by_ticker)

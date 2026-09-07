@@ -8,8 +8,11 @@ Context:
 Contracts:
   - build_data_context(ticker, start_date, frequency, end_date) -> DataContext
   - DataContext exposes bars, daily_bars, horizon, ticker, frequency, is_valid
+Dependencies UPWARD:
+  - core.market.features, core.market.charts, data_pipeline (I/O boundary,
+    see the doc-guard: allow=core-purity markers below)
 Dependencies DOWNWARD:
-  - core.market.features, core.market.charts, services.market.analysis.facade
+  - core.market.analyzer, services.market.analysis.facade
 """
 
 from __future__ import annotations

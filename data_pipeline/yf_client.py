@@ -176,6 +176,13 @@ def fetch_option_chain(ticker: str) -> dict[str, Any]:
             opt = yf.Ticker(ticker).option_chain(exp)
         except Exception as exc:  # noqa: BLE001
             logger.warning("fetch_option_chain: %s exp=%s failed: %s", ticker, exp, exc)
+            # Exceptions (e.g. 429s surfacing as raised errors) count toward
+            # the fail-fast budget too, otherwise an error-storm burns the
+            # throttle across every expiry instead of aborting early.
+            with consecutive_empty_lock:
+                consecutive_empty["n"] += 1
+                if consecutive_empty["n"] >= EMPTY_FAIL_FAST:
+                    consecutive_empty["abort"] = True
             return exp, "error"
         if opt is None or opt.calls is None or opt.puts is None:
             with consecutive_empty_lock:
