@@ -187,7 +187,7 @@ class MarketChartAssembly:
                         else col
                     )
                 )
-                .to_html(classes="table table-striped table-sm", index=True, escape=False)
+                .to_html(classes="table table-striped table-sm", index=True, escape=True)
             )
             return chart, projection_table
         except Exception as e:

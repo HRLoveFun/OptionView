@@ -105,7 +105,10 @@ def install(app) -> None:
                     {
                         "status": "error",
                         "code": "internal_error",
-                        "message": str(err) or "internal server error",
+                        # CONSTRAINT: never echo str(err) to the client — it can
+                        # carry internal paths, SQL fragments, or upstream URLs.
+                        # The details live in the server log above.
+                        "message": "internal server error",
                     }
                 ),
                 500,

@@ -48,7 +48,7 @@ def health_data():
     except Exception as e:
         logger.error("health_data error: %s", e, exc_info=True)
         return (
-            jsonify({"status": "error", "code": "health_failed", "message": str(e)}),
+            jsonify({"status": "error", "code": "health_failed", "message": "数据健康检查失败，请稍后重试"}),
             500,
         )
 
@@ -70,7 +70,7 @@ def health_status():
     except Exception as e:
         logger.error("health_status error: %s", e, exc_info=True)
         return (
-            jsonify({"status": "error", "code": "health_failed", "message": str(e)}),
+            jsonify({"status": "error", "code": "health_failed", "message": "状态检查失败，请稍后重试"}),
             500,
         )
 
@@ -122,6 +122,6 @@ def data_seed():
     except Exception as e:
         logger.error("data_seed error for %s: %s", ticker, e, exc_info=True)
         return (
-            jsonify({"status": "error", "code": "seed_failed", "message": str(e)}),
+            jsonify({"status": "error", "code": "seed_failed", "message": "历史数据回填失败，请稍后重试"}),
             500,
         )

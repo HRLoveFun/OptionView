@@ -288,16 +288,34 @@ def _refresh_api_fixtures(ticker: str) -> None:
 
 def _jinja_env():
     from jinja2 import Environment, FileSystemLoader
+    from markupsafe import Markup
 
-    env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), autoescape=False)
+    # CONSTRAINT: templates are written for Flask (autoescape=True) and the
+    # production app runs with autoescape on — the Pages build must match, or
+    # any snapshot string containing HTML is baked into the page unescaped.
+    env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), autoescape=True)
 
     def url_for(endpoint, **values):
         if endpoint == "static":
             return "./static/" + values.get("filename", "")
         return "#"
 
+    # Mirror Flask's |tojson contract: safe inside <script> (escapes </script>
+    # breakouts) and marked Markup-safe so autoescape doesn't double-escape.
+    def _tojson(value):
+        out = json.dumps(value, ensure_ascii=False)
+        out = (
+            out.replace("<", "\\u003c")
+            .replace(">", "\\u003e")
+            .replace("&", "\\u0026")
+            .replace("'", "\\u0027")
+            .replace("\u2028", "\\u2028")
+            .replace("\u2029", "\\u2029")
+        )
+        return Markup(out)
+
     env.globals["url_for"] = url_for
-    env.filters["tojson"] = lambda v: json.dumps(v, ensure_ascii=False)
+    env.filters["tojson"] = _tojson
     return env
 
 

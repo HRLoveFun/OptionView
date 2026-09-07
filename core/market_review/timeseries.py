@@ -52,7 +52,7 @@ def build_timeseries(instrument, data, returns, display_names) -> dict:
     }
     try:
         summary_html = build_review(instrument, data, returns, display_names).to_html(
-            classes="table table-striped", index=True, escape=False
+            classes="table table-striped", index=True, escape=True
         )
     except Exception:
         summary_html = ""

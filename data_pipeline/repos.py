@@ -59,12 +59,39 @@ def insert_tracked_strategy(values: Iterable[Any]) -> int:
         return cur.lastrowid
 
 
+_TRACKED_STRATEGY_SELECTABLE_COLS = frozenset(
+    {
+        "id",
+        "ticker",
+        "template",
+        "expiry",
+        "entry_date",
+        "entry_spot",
+        "entry_net_premium",
+        "qty",
+        "legs_json",
+        "entry_meta_json",
+        "status",
+        "notes",
+        "closed_date",
+        "closed_value",
+    }
+)
+
+
 def select_tracked_strategies(cols: list[str], status: str | None) -> list[tuple[Any, ...]]:
     """Return selected ``tracked_strategies`` columns ordered by id DESC.
 
     When ``status`` is ``None`` every row is returned; otherwise only rows
     matching ``status`` are returned.
+
+    CONSTRAINT: ``cols`` are interpolated into the SQL, so they are checked
+    against the table schema whitelist — repos is the single SQL assembly
+    point and must not accept arbitrary column names.
     """
+    unknown = [c for c in cols if c not in _TRACKED_STRATEGY_SELECTABLE_COLS]
+    if unknown:
+        raise ValueError(f"unknown tracked_strategies columns: {unknown}")
     where = "WHERE status = ?" if status else ""
     params = (status,) if status else ()
     with get_conn() as conn:

@@ -36,6 +36,22 @@ logger = logging.getLogger(__name__)
 bp = Blueprint("options", __name__)
 
 
+def _num_arg(name: str, default: float, cast=float) -> float:
+    """Parse a numeric query param, mapping garbage input to 400 (not 500).
+
+    CONSTRAINT: the unified error contract says malformed client input is a
+    400 ``invalid_parameter`` — a bare ``int(request.args[...])`` used to fall
+    through to the global 500 ``internal_error`` handler.
+    """
+    raw = request.args.get(name)
+    if raw is None or raw == "":
+        return default
+    try:
+        return cast(raw)
+    except (TypeError, ValueError):
+        raise ApiError(f"参数 {name} 不是合法数字", code="invalid_parameter", status=400)
+
+
 @bp.route("/api/option_chain", methods=["GET"])
 def option_chain():
     """
@@ -63,10 +79,10 @@ def option_chain():
     except ValueError:
         pass  # keep as-is
 
-    max_dte = int(request.args.get("max_dte", 45))
-    moneyness_low = float(request.args.get("moneyness_low", 0.7))
-    moneyness_high = float(request.args.get("moneyness_high", 1.3))
-    max_contracts = int(request.args.get("max_contracts", 1000))
+    max_dte = _num_arg("max_dte", 45, int)
+    moneyness_low = _num_arg("moneyness_low", 0.7)
+    moneyness_high = _num_arg("moneyness_high", 1.3)
+    max_contracts = _num_arg("max_contracts", 1000, int)
 
     try:
         result = OptionsChainService.fetch_records_filtered(
@@ -88,7 +104,7 @@ def option_chain():
         return jsonify(result)
     except Exception as e:
         logger.error("Error fetching option chain for %s: %s", ticker_sym, e, exc_info=True)
-        msg = f"获取期权链失败: {str(e)}"
+        msg = "获取期权链失败，请稍后重试"
         return (
             jsonify(
                 {
@@ -127,9 +143,9 @@ def preload_option_chain():
         set_preload_cached(ticker, payload)
         return jsonify({"status": "ok", **payload})
     except Exception as e:
-        logger.error("preload_option_chain failed for %s: %s", ticker, e)
+        logger.error("preload_option_chain failed for %s: %s", ticker, e, exc_info=True)
         return (
-            jsonify({"status": "error", "code": "option_chain_failed", "message": str(e)}),
+            jsonify({"status": "error", "code": "option_chain_failed", "message": "预加载期权链失败，请稍后重试"}),
             500,
         )
 
@@ -159,7 +175,7 @@ def iv_smile_json():
     except Exception as e:
         logger.error("iv_smile_json error: %s", e, exc_info=True)
         return (
-            jsonify({"status": "error", "code": "iv_smile_failed", "message": str(e)}),
+            jsonify({"status": "error", "code": "iv_smile_failed", "message": "获取 IV Smile 失败，请稍后重试"}),
             500,
         )
 
@@ -189,7 +205,7 @@ def oi_profile_json():
     except Exception as e:
         logger.error("oi_profile_json error: %s", e, exc_info=True)
         return (
-            jsonify({"status": "error", "code": "oi_profile_failed", "message": str(e)}),
+            jsonify({"status": "error", "code": "oi_profile_failed", "message": "获取 OI 分布失败，请稍后重试"}),
             500,
         )
 
@@ -199,12 +215,17 @@ def odds_with_vol():
     """Return odds data enriched with implied realized vol vs ATM IV."""
     data = request.get_json(silent=True) or {}
     raw_ticker = data.get("ticker", "").strip().upper()
-    target_pct = float(data.get("target_pct", 10))
     if not raw_ticker:
         return (
             jsonify({"status": "error", "code": "missing_ticker", "message": "No ticker provided"}),
             400,
         )
+    try:
+        target_pct = float(data.get("target_pct", 10))
+    except (TypeError, ValueError):
+        raise ApiError("target_pct 必须是数字", code="invalid_parameter", status=400)
+    if not (0 < target_pct <= 100):
+        raise ApiError("target_pct 必须在 (0, 100] 区间", code="invalid_parameter", status=400)
     try:
         ticker, _futu = normalize_ticker(raw_ticker)
     except ValueError:
@@ -215,7 +236,7 @@ def odds_with_vol():
     except Exception as e:
         logger.error("odds_with_vol error: %s", e, exc_info=True)
         return (
-            jsonify({"status": "error", "code": "odds_failed", "message": str(e)}),
+            jsonify({"status": "error", "code": "odds_failed", "message": "计算胜率失败，请稍后重试"}),
             500,
         )
 

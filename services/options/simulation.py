@@ -212,7 +212,9 @@ def run_simulation(payload: dict | None) -> dict:
 
     try:
         qty = int(float(payload.get("qty", 1)))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
+        # OverflowError: float("1e999") → inf → int(inf) raises OverflowError,
+        # which is not a ValueError and used to escape as a 500.
         raise ApiError("qty must be an integer", code="invalid_qty")
     if qty < 1 or qty > 1000:
         raise ApiError("qty must be between 1 and 1000", code="invalid_qty")
@@ -226,7 +228,7 @@ def run_simulation(payload: dict | None) -> dict:
 
     try:
         n_points = int(float(payload.get("n_points", DEFAULT_POINTS)))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         raise ApiError("n_points must be an integer", code="invalid_n_points")
     n_points = max(21, min(n_points, MAX_POINTS))
 

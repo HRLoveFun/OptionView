@@ -20,6 +20,7 @@ from services.portfolio.facade import (
     list_positions,
     portfolio_snapshot,
 )
+from utils.api_errors import ApiError
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +47,7 @@ def portfolio_analysis():
     except Exception as e:
         logger.error("portfolio_analysis error: %s", e, exc_info=True)
         return (
-            jsonify({"status": "error", "code": "portfolio_failed", "message": str(e)}),
+            jsonify({"status": "error", "code": "portfolio_failed", "message": "组合分析失败，请稍后重试"}),
             500,
         )
 
@@ -63,7 +64,11 @@ def portfolio_positions():
 @bp.route("/api/portfolio/positions/<int:position_id>/close", methods=["POST"])
 def portfolio_close(position_id: int):
     body = request.get_json(silent=True) or {}
-    return jsonify(close_position(position_id, float(body.get("closed_value", 0.0))))
+    try:
+        closed_value = float(body.get("closed_value", 0.0))
+    except (TypeError, ValueError):
+        raise ApiError("closed_value 必须是数字", code="invalid_closed_value", status=400)
+    return jsonify(close_position(position_id, closed_value))
 
 
 @bp.route("/api/portfolio/snapshot", methods=["GET"])

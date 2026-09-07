@@ -62,10 +62,12 @@
         return `${pretty(volRegime)} - ${pretty(dirRegime)}`;
     }
 
-    async function fetchJSON(url, opts) {
-        const resp = await fetch(url, opts);
-        if (!resp.ok) throw new Error('HTTP ' + resp.status);
-        return resp.json();
+    // All requests go through window.api (static/api.js): unified error
+    // normalization plus per-key AbortController, so a rapid range-button
+    // click cancels the in-flight history request instead of letting a slow
+    // stale response overwrite the newly selected window.
+    function _notAbort(err) {
+        return !(err && err.name === 'AbortError');
     }
 
     function renderCurrent(data) {
@@ -277,7 +279,7 @@
 
     async function loadHistory() {
         try {
-            const data = await fetchJSON(`/api/regime/history?days=${currentDays}`);
+            const data = await api.get(`/api/regime/history?days=${currentDays}`, { key: 'regime_history' });
             if (data.status !== 'ok') throw new Error(data.message || 'history error');
             renderStrip(data.rows || []);
             renderCoverage(data.coverage);
@@ -287,6 +289,7 @@
                 tag.innerHTML = `source: ${data.source}`;
             }
         } catch (e) {
+            if (!_notAbort(e)) return;
             console.error('regime history failed', e);
             const el = document.getElementById('regime-coverage-body');
             if (el) el.innerHTML = `<span class="semantic-neg">Failed to load history: ${e.message}</span>`;
@@ -295,10 +298,11 @@
 
     async function loadCurrent() {
         try {
-            const data = await fetchJSON('/api/regime/current');
+            const data = await api.get('/api/regime/current', { key: 'regime_current' });
             if (data.status !== 'ok') throw new Error(data.message || 'current error');
             renderCurrent(data);
         } catch (e) {
+            if (!_notAbort(e)) return;
             console.error('regime current failed', e);
             const el = document.getElementById('regime-current-body');
             if (el) el.innerHTML = `<span class="semantic-neg">Failed to load current regime: ${e.message}</span>`;
@@ -309,14 +313,14 @@
         const btn = document.getElementById('regime-backfill-btn');
         if (btn) { btn.disabled = true; btn.innerHTML = 'Backfilling…'; }
         try {
-            const data = await fetchJSON('/api/regime/backfill', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ days: Math.max(currentDays, 90) })
+            const data = await api.post('/api/regime/backfill', {
+                key: 'regime_backfill',
+                body: { days: Math.max(currentDays, 90) }
             });
             if (data.status !== 'ok') throw new Error(data.message || 'backfill error');
             await loadHistory();
         } catch (e) {
+            if (!_notAbort(e)) return;
             alert('Backfill failed: ' + e.message);
         } finally {
             if (btn) { btn.disabled = false; btn.innerHTML = 'Backfill &amp; Persist'; }

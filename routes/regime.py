@@ -30,7 +30,7 @@ def regime_current():
     except Exception as e:
         logger.error("regime_current error: %s", e, exc_info=True)
         return (
-            jsonify({"status": "error", "code": "regime_failed", "message": str(e)}),
+            jsonify({"status": "error", "code": "regime_failed", "message": "获取当前市场状态失败，请稍后重试"}),
             500,
         )
 
@@ -49,7 +49,9 @@ def regime_history():
     except Exception as e:
         logger.error("regime_history error: %s", e, exc_info=True)
         return (
-            jsonify({"status": "error", "code": "regime_history_failed", "message": str(e)}),
+            jsonify(
+                {"status": "error", "code": "regime_history_failed", "message": "获取市场状态历史失败，请稍后重试"}
+            ),
             500,
         )
 
@@ -83,6 +85,8 @@ def regime_backfill():
     except Exception as e:
         logger.error("regime_backfill error: %s", e, exc_info=True)
         return (
-            jsonify({"status": "error", "code": "regime_backfill_failed", "message": str(e)}),
+            jsonify(
+                {"status": "error", "code": "regime_backfill_failed", "message": "回填市场状态日志失败，请稍后重试"}
+            ),
             500,
         )

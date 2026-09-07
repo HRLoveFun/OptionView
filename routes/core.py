@@ -156,8 +156,8 @@ def validate_ticker():
         return jsonify({"valid": is_valid, "message": message})
 
     except Exception as e:
-        logger.error("Error validating ticker: %s", e)
-        return jsonify({"valid": False, "message": f"Error validating ticker: {str(e)}"})
+        logger.error("Error validating ticker: %s", e, exc_info=True)
+        return jsonify({"valid": False, "message": "校验 ticker 时出错，请稍后重试"})
 
 
 @bp.route("/api/validate_tickers", methods=["POST"])

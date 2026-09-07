@@ -362,13 +362,54 @@ FAKE_MARKET_REVIEW_TS: dict[str, Any] = {
 }
 
 
+# Regime mocks mirror the REAL service contract (services/regime/facade.py):
+#   /api/regime/current  → {"status":"ok", "label": {...}, "data_complete", ...}
+#   /api/regime/history  → {"status":"ok", "rows": [...], "coverage": {...}, "source"}
+# The old mock ("ok": True, "data": {...}) matched neither endpoint, so
+# regime.js threw "current error"/"history error" on every smoke run — a
+# timing-race flake: the console.error landed before or after the assertion
+# depending on response latency.
+FAKE_REGIME_CURRENT: dict[str, Any] = {
+    "status": "ok",
+    "label": {
+        "date": "2026-09-01",
+        "vol_regime": "elevated",
+        "dir_regime": "up",
+        "vix_value": 22.0,
+        "sma_20": 5000.0,
+        "sma_slope_5d": 0.4,
+        "close_vs_sma_pct": 1.2,
+    },
+    "data_complete": True,
+    "spy_history_days": 60,
+    "vix_history_days": 60,
+}
+
 FAKE_REGIME_HISTORY: dict[str, Any] = {
-    "ok": True,
-    "data": {
-        "dates": ["2026-04-01", "2026-04-15", "2026-04-25"],
-        "vol_regime": ["normal", "normal", "elevated"],
-        "trend_regime": ["up", "up", "up"],
-        "vix": [15.0, 16.5, 22.0],
+    "status": "ok",
+    "rows": [
+        {
+            "date": d,
+            "vol_regime": vr,
+            "dir_regime": "up",
+            "vix_value": v,
+            "sma_20": 5000.0,
+            "sma_slope_5d": 0.3,
+            "close_vs_sma_pct": 1.0,
+        }
+        for d, vr, v in (
+            ("2026-04-01", "normal", 15.0),
+            ("2026-04-15", "normal", 16.5),
+            ("2026-04-25", "elevated", 22.0),
+        )
+    ],
+    "coverage": {
+        "vol_regimes_observed": ["normal", "elevated"],
+        "dir_regimes_observed": ["up"],
+        "unique_composite_regimes": 2,
+        "days_with_unknown": 0,
+        "charter_exit_condition_met": True,
+        "regime_transitions": [{"date": "2026-04-25", "from": "normal-up", "to": "elevated-up"}],
     },
     "source": "synthetic",
 }
@@ -418,8 +459,10 @@ def mock_apis(page):
             route.fulfill(status=200, content_type="application/json", json=FAKE_OPTION_CHAIN)
         elif "/api/market_review_ts" in url:
             route.fulfill(status=200, content_type="application/json", json=FAKE_MARKET_REVIEW_TS)
-        elif "/api/regime/history" in url or "/api/regime/current" in url:
+        elif "/api/regime/history" in url:
             route.fulfill(status=200, content_type="application/json", json=FAKE_REGIME_HISTORY)
+        elif "/api/regime/current" in url:
+            route.fulfill(status=200, content_type="application/json", json=FAKE_REGIME_CURRENT)
         elif "/api/odds_with_vol" in url:
             route.fulfill(status=200, content_type="application/json", json={"ok": True, "rows": []})
         elif "/api/portfolio_analysis" in url:

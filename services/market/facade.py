@@ -79,8 +79,12 @@ class MarketService:
             start_d = form_data.get("parsed_start_time")
             end_exclusive = exclusive_month_end(form_data.get("parsed_end_time"))
             review_table = market_review(form_data["ticker"], start_d, end_exclusive)
+            # escape=True: cells are formatted numbers / display names. The
+            # template injects this via |safe, so pandas must do the escaping
+            # — turning it off turns any future free-text column into a
+            # stored-XSS sink.
             results["market_review_table"] = review_table.to_html(
-                classes="table table-striped", index=True, escape=False
+                classes="table table-striped", index=True, escape=True
             )
         except Exception as e:
             logger.error(f"Error generating market review: {e}", exc_info=True)

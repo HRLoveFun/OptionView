@@ -283,7 +283,15 @@ class PortfolioAnalysisService:
 
         spots = _get_spots(positions)
         main_ticker = positions[0]["ticker"]
-        spot = spots.get(main_ticker, 100)
+        if main_ticker in spots:
+            spot = spots[main_ticker]
+        else:
+            # Never present a fabricated $100 as a clean result: surface the
+            # fallback so callers (and users) know the risk numbers are based
+            # on an assumed spot, not a live quote.
+            result["warnings"].append(f"未获取到 {main_ticker} 的实时价格，风险指标按假定值 $100 计算")
+            logger.warning("portfolio_analysis: no live spot for %s — using $100 fallback", main_ticker)
+            spot = 100
 
         # Build position list for greeks engine
         greeks_positions = []
