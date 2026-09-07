@@ -20,6 +20,35 @@ _SENTINEL_GAP_THRESHOLD_DAYS = 365
 _SENTINEL_MIN_DB_SPAN_DAYS = 365
 
 
+def needs_backfill(ticker: str, start: dt.date, end: dt.date) -> bool:
+    """Cheap probe: would ``ensure_range(ticker, start, end)`` need a download?
+
+    Checks the memo and DB coverage only — never networks. Lets callers keep
+    wide-range backfills off the request thread. NOTE: the probe does not
+    model the sentinel short-circuit; a false positive there merely kicks a
+    background ``ensure_range`` that immediately short-circuits.
+    """
+    now = time.monotonic()
+    with _ensure_range_lock:
+        memo = _ensure_range_memo.get(ticker)
+        if memo is not None:
+            last_ts, last_start, last_end = memo
+            if (now - last_ts) < _ENSURE_RANGE_TTL and last_start <= start and last_end >= end:
+                return False
+    cov = _db.fetch_df(
+        "SELECT MIN(date) AS min_d, MAX(date) AS max_d, COUNT(*) AS n FROM clean_prices WHERE ticker=?",
+        (ticker,),
+    )
+    if cov.empty or not cov.iloc[0]["n"]:
+        return True
+    try:
+        existing_min = dt.date.fromisoformat(str(cov.iloc[0]["min_d"]))
+        existing_max = dt.date.fromisoformat(str(cov.iloc[0]["max_d"]))
+    except (ValueError, TypeError):
+        return True
+    return not (existing_min <= start and existing_max >= end - dt.timedelta(days=3))
+
+
 def ensure_range(ticker: str, start: dt.date, end: dt.date) -> bool:
     """Ensure clean_prices covers [start, end].
 

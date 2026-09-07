@@ -118,8 +118,15 @@ def clean_range(ticker: str, start: dt.date | None = None, end: dt.date | None =
         aligned[["open", "high", "low", "close", "adj_close", "volume"]].isna().any(axis=1).astype(int)
     )
 
-    # Interpolate missing field values within trading days: forward fill for volume only (policy)
-    aligned["volume"] = aligned["volume"].ffill()
+    # CONSTRAINT: no interpolation of any kind — a missing row stays missing.
+    # Volume used to be ffilled ("policy"), but that was strictly harmful:
+    # the W/ME/QE aggregations in processing.py sum volume, so fabricated
+    # values on gap days inflated weekly/monthly totals, and log_vol_delta /
+    # vol_zscore treated the carried value as real. Every consumer (sum, log,
+    # zscore) handles NaN correctly; _flag_anomalies skips NaN naturally.
+
+    # Anomalies
+    aligned = _flag_anomalies(aligned)
 
     # Anomalies
     aligned = _flag_anomalies(aligned)

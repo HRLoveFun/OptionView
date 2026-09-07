@@ -65,45 +65,49 @@ def test_cache_lru_promotion_keeps_recently_used(monkeypatch):
     assert cs.ChartService.cache_get(("z",)) == "Z"
 
 
-def test_cached_chart_decorator_memoises_calls():
+def test_cached_or_build_memoises_calls():
+    """The chart-level memo entry point (replaces the removed cached_chart
+    decorator / generate_cached — single cache pattern per 2026-09 review)."""
+    from services.market.analysis.statistical import _cached_or_build
+
     calls = {"n": 0}
 
-    @cs.cached_chart(key_fn=lambda ticker, **_: ("t", ticker))
-    def render(ticker: str) -> str:
+    def builder() -> str:
         calls["n"] += 1
-        return f"png-{ticker}"
+        return f"png-{calls['n']}"
 
-    assert render("AAPL") == "png-AAPL"
-    assert render("AAPL") == "png-AAPL"
-    assert calls["n"] == 1  # second call served from cache
-    assert render("MSFT") == "png-MSFT"
+    assert _cached_or_build(("t", "AAPL"), builder) == "png-1"
+    assert _cached_or_build(("t", "AAPL"), builder) == "png-1"  # served from cache
+    assert calls["n"] == 1
+    assert _cached_or_build(("t", "MSFT"), builder) == "png-2"
     assert calls["n"] == 2
 
 
-def test_cached_chart_does_not_cache_empty_result():
+def test_cached_or_build_does_not_cache_empty_result():
+    from services.market.analysis.statistical import _cached_or_build
+
     calls = {"n": 0}
 
-    @cs.cached_chart(key_fn=lambda **kw: ("k",))
-    def render() -> str:
+    def builder() -> str:
         calls["n"] += 1
         return ""  # falsy: must not be cached
 
-    render()
-    render()
+    _cached_or_build(("k",), builder)
+    _cached_or_build(("k",), builder)
     assert calls["n"] == 2
 
 
-def test_cached_chart_bypasses_cache_when_key_fn_raises(caplog):
-    calls = {"n": 0}
+def test_cached_or_build_does_not_cache_none_or_non_string():
+    from services.market.analysis.statistical import _cached_or_build
 
-    @cs.cached_chart(key_fn=lambda **_: (_ for _ in ()).throw(RuntimeError("boom")))
-    def render(**_) -> str:
-        calls["n"] += 1
-        return "PNG"
+    assert _cached_or_build(("none",), lambda: None) is None
+    assert cs.ChartService.cache_get(("none",)) is None
 
-    assert render(x=1) == "PNG"
-    assert render(x=1) == "PNG"
-    assert calls["n"] == 2  # cache fully bypassed
+    # A builder returning a non-string (e.g. a raw Figure) must not be cached —
+    # only base64 strings belong in the chart cache.
+    sentinel = object()
+    assert _cached_or_build(("obj",), lambda: sentinel) is sentinel
+    assert cs.ChartService.cache_get(("obj",)) is None
 
 
 def test_features_hash_stable_for_same_input():

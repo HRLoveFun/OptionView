@@ -2,6 +2,9 @@
 
 import datetime as dt
 import logging
+import os
+import threading
+import time
 
 import pandas as pd
 
@@ -12,6 +15,61 @@ from . import _range as _r
 from . import _update as _u
 
 logger = logging.getLogger(__name__)
+
+# ── Background backfill ──────────────────────────────────────────────────────
+# CONSTRAINT: a first-ever wide-range request (default start = today − 5y)
+# means ~21 throttled download chunks — tens of seconds to minutes of work.
+# That must never run on the request thread. The backfill is kicked into a
+# daemon thread (ensure_range's own in-flight dedup collapses concurrent
+# kicks), the request waits a short grace period so the common "one chunk
+# missing" case still returns full data, then reads whatever coverage exists.
+_BACKFILL_WAIT_SECONDS = float(os.environ.get("BACKFILL_WAIT_SECONDS", "8"))
+_backfill_lock = threading.Lock()
+_backfill_threads: dict[tuple, threading.Thread] = {}
+
+
+def _kick_backfill(ticker: str, start, end) -> None:
+    key = (ticker, str(start), str(end))
+    with _backfill_lock:
+        existing = _backfill_threads.get(key)
+        if existing is not None and existing.is_alive():
+            return
+        t = threading.Thread(target=_run_backfill, args=(ticker, start, end, key), daemon=True)
+        _backfill_threads[key] = t
+        t.start()
+    logger.info("background backfill kicked for %s [%s .. %s]", ticker, start, end)
+
+
+def _run_backfill(ticker, start, end, key) -> None:
+    try:
+        _r.ensure_range(ticker, start, end)
+    except Exception as e:
+        logger.warning("background backfill failed for %s: %s", ticker, e)
+    finally:
+        # Daemon threads never re-run dispatch's finally-cleanups; drop this
+        # thread's SQLite connection so _all_conns doesn't grow per backfill.
+        from data_pipeline.db import close_thread_conn
+
+        close_thread_conn()
+        with _backfill_lock:
+            _backfill_threads.pop(key, None)
+
+
+def _join_backfills(timeout: float | None = None) -> None:
+    """Test helper: wait for all in-flight background backfills."""
+    with _backfill_lock:
+        threads = list(_backfill_threads.values())
+    for t in threads:
+        t.join(timeout=timeout)
+
+
+def _wait_for_coverage(ticker, start, end, timeout: float) -> bool:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if not _r.needs_backfill(ticker, start, end):
+            return True
+        time.sleep(0.25)
+    return not _r.needs_backfill(ticker, start, end)
 
 
 def get_cleaned_daily(ticker: str, start: dt.date | None = None, end: dt.date | None = None) -> pd.DataFrame:
@@ -29,13 +87,25 @@ def get_cleaned_daily(ticker: str, start: dt.date | None = None, end: dt.date | 
         # ensure_range path.
         return cached
     _u.manual_update(ticker, days=7)
-    _r.ensure_range(ticker, start, end)
+    if _r.needs_backfill(ticker, start, end):
+        # Missing span ⇒ keep the heavy download off the request thread; give
+        # it a short grace period so "one chunk missing" still returns full
+        # data, then fall through to whatever coverage the DB has now.
+        _kick_backfill(ticker, start, end)
+        _wait_for_coverage(ticker, start, end, _BACKFILL_WAIT_SECONDS)
+    else:
+        _r.ensure_range(ticker, start, end)
     init_db()
     df = fetch_df(
         "SELECT date, open, high, low, close, adj_close, volume FROM clean_prices WHERE ticker=? AND date>=? AND date<=?",
         (ticker, start.isoformat(), end.isoformat()),
     )
-    _g._cache_set(cache_key, df)
+    # Never memoise a partial read: while the background backfill is running
+    # this df may lack the requested span. ensure_range invalidates the
+    # ticker's cache entries on success, so the completed data becomes visible
+    # on the next request.
+    if not _r.needs_backfill(ticker, start, end):
+        _g._cache_set(cache_key, df)
     return df
 
 

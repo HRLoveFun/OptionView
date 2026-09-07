@@ -172,7 +172,11 @@ def upsert_raw_prices(
         return result
 
     df_new = df_new.copy()
-    df_new.index = pd.DatetimeIndex(df_new.index).tz_localize(None)
+    idx = pd.DatetimeIndex(df_new.index)
+    # yfinance's daily index is normally tz-naive, but some versions/paths
+    # return tz-aware stamps — tz_localize(None) would raise on those, so
+    # convert instead of localize when a tz is present.
+    df_new.index = idx.tz_localize(None) if idx.tz is None else idx.tz_convert(None)
     df_new["date"] = df_new.index.date
 
     rows = []

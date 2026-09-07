@@ -6,8 +6,6 @@ into a single file to maximise context density for AI agents and eliminate the
 "shell + core" anti-pattern.
 """
 
-import base64
-import io
 import logging
 
 import matplotlib
@@ -16,6 +14,7 @@ import numpy as np
 from scipy.stats import norm
 
 from core.options.greeks.portfolio import portfolio_greeks_table, theta_decay_path
+from services.market.charts import ChartService
 
 matplotlib.use("Agg")
 
@@ -25,14 +24,14 @@ logger = logging.getLogger(__name__)
 # ── Charts ──────────────────────────────────────────────────────────
 
 
-def _fig_to_base64(fig) -> str:
-    """Encode a matplotlib Figure as a base64 PNG string and explicitly close it."""
-    buf = io.BytesIO()
-    fig.savefig(buf, format="png", dpi=150, bbox_inches="tight")
-    buf.seek(0)
-    result = base64.b64encode(buf.getvalue()).decode()
-    plt.close(fig)
-    return result
+def _fig_to_base64(fig) -> str | None:
+    """Encode a matplotlib Figure as a base64 PNG string.
+
+    Delegates to ChartService.convert_plot_to_base64 (single fig→base64
+    implementation repo-wide) so this path also gains its exception protection
+    and guaranteed fig close-on-error.
+    """
+    return ChartService.convert_plot_to_base64(fig)
 
 
 def _pnl_curve(legs, lo, hi, n=2000):

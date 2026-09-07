@@ -10,14 +10,13 @@ underlying data, we can safely memoise them in-process.
 from __future__ import annotations
 
 import base64
-import functools
 import hashlib
 import io
 import json
 import logging
 import threading
 from collections import OrderedDict
-from collections.abc import Callable, Hashable
+from collections.abc import Hashable
 from typing import Any
 
 import matplotlib.pyplot as plt
@@ -86,36 +85,6 @@ def features_hash(features: Any) -> str:
     return hashlib.sha1(payload.encode("utf-8")).hexdigest()[:12]
 
 
-def cached_chart(key_fn: Callable[..., Hashable]) -> Callable:
-    """Decorator that memoises a function returning a base64 PNG string.
-
-    ``key_fn(*args, **kwargs)`` must produce a hashable cache key — typically
-    ``(ticker, features_hash(...))``. Cache hits skip the wrapped function.
-    """
-
-    def _decorator(func: Callable[..., str | None]) -> Callable[..., str | None]:
-        @functools.wraps(func)
-        def _wrapper(*args, **kwargs):
-            try:
-                key = key_fn(*args, **kwargs)
-            except Exception:
-                logger.warning("cached_chart key_fn raised; bypassing cache for %s", func.__name__)
-                return func(*args, **kwargs)
-            cached = _cache_get(key)
-            if cached is not None:
-                logger.debug("chart cache HIT %s key=%r", func.__name__, key)
-                return cached
-            result = func(*args, **kwargs)
-            if isinstance(result, str) and result:
-                _cache_put(key, result)
-                logger.debug("chart cache MISS→stored %s key=%r", func.__name__, key)
-            return result
-
-        return _wrapper
-
-    return _decorator
-
-
 class ChartService:
     """Service for generating charts and visualizations."""
 
@@ -142,22 +111,7 @@ class ChartService:
             plt.close(fig)
             return None
 
-    @staticmethod
-    def generate_cached(key: Hashable, builder: Callable[[], Any]) -> str | None:
-        """Return cached base64 for ``key`` or build → encode → cache.
-
-        ``builder`` is invoked only on cache miss and must return a matplotlib
-        ``Figure`` (which this method will close after encoding).
-        """
-        cached = _cache_get(key)
-        if cached is not None:
-            logger.debug("chart cache HIT key=%r", key)
-            return cached
-        fig = builder()
-        if fig is None:
-            return None
-        encoded = ChartService.convert_plot_to_base64(fig)
-        if encoded:
-            _cache_put(key, encoded)
-            logger.debug("chart cache MISS→stored key=%r", key)
-        return encoded
+    # NOTE: the chart-level memo entry point is _cached_or_build in
+    # services/market/analysis/statistical.py — it composes cache_get/cache_put
+    # above. The former `cached_chart` decorator and `ChartService.generate_cached`
+    # had no production callers and were removed to keep a single cache pattern.

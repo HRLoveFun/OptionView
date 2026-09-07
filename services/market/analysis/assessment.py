@@ -78,6 +78,11 @@ def _generate_assessment(analyzer, form_data):
             if ps_result:
                 results["position_sizing"] = ps_result
     except Exception as e:
+        # WHY (deliberate degradation, confirmed with the owner): position
+        # sizing is auxiliary info on a page whose subject is the statistical
+        # charts — surfacing a dedicated error fragment for a failed sizing
+        # calc would be more disruptive than the missing panel. Contrast with
+        # the other failures in this function, which DO set assessment_error.
         logger.warning(f"Position sizing failed: {e}")
 
     return results
