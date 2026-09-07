@@ -12,7 +12,7 @@ Contracts:
   - render_streaming_slice(kind) -> Response | tuple[str, int]
 Dependencies UPWARD:
   - data_pipeline.job_cache, data_pipeline.db
-  - services.market.analysis, services.options.chain
+  - services.market.analysis
   - utils.constants, utils.render_helpers
 Dependencies DOWNWARD:
   - routes/core.py
@@ -29,7 +29,6 @@ from flask import render_template, request
 from data_pipeline.db import close_thread_conn
 from data_pipeline.job_cache import compute_or_get, get_job
 from services.market.analysis import AnalysisService
-from services.options.chain import OptionsChainService
 from utils.constants import (
     DEFAULT_FREQUENCY,
     DEFAULT_RISK_THRESHOLD,
@@ -48,7 +47,7 @@ _RENDER_KIND_SLICES: dict[str, tuple[str | None, str]] = {
     "market_review": ("generate_market_review_slice", "partials/fragments/market_review.html"),
     "statistical": ("generate_statistical_slice", "partials/fragments/statistical.html"),
     "assessment": ("generate_assessment_slice", "partials/fragments/assessment.html"),
-    "options_chain": (None, "partials/fragments/options_chain.html"),  # special-cased below
+    "options_chain": ("generate_options_chain_slice", "partials/fragments/options_chain.html"),
 }
 
 
@@ -109,13 +108,6 @@ def render_streaming_slice(kind: str) -> Any:
         # Worker-thread cleanup so we don't leak DB connections.
         try:
             local_form = {**form_data, "ticker": ticker}
-            if kind == "options_chain":
-                # Direct OptionsChainService call — no MarketAnalyzer needed.
-                try:
-                    return OptionsChainService.generate_options_chain_analysis(ticker) or {}
-                except Exception as e:
-                    logger.error("options_chain slice failed for %s: %s", ticker, e, exc_info=True)
-                    return {"oc_error": str(e)}
             # Late-bind the slice attr so test monkey-patches are honoured.
             slice_fn = getattr(AnalysisService, slice_fn_name)
             return slice_fn(local_form)

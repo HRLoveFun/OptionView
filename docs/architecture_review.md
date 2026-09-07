@@ -64,6 +64,12 @@ for the live list. State at registration:
 | `data_pipeline/downloader.py` | DB-aware gap-detection bulk downloads; documented chokepoint alongside `yf_client` (see `yf_client` module docstring) | fold the gap logic into `yf_client` |
 | `data_pipeline/data_ops/_query.py::get_latest_spot` — **resolved 2026-09-03** | former spot fast-path fetched yfinance internally | now routes through `yf_client.fetch_spot` |
 
+### Watch list (pre-debt, no marker yet)
+
+| Location | Concern | Trigger to act |
+|---|---|---|
+| `data_pipeline/yf_client.py` (391 lines, fan-in 11) | 9 lines below the 400-line god-file threshold; the throttle wrapper itself already lives in `utils/network.py::yf_throttle`, but each new yfinance endpoint (option greeks feeds, dividends/splits, etc.) grows the file | any edit that pushes it past 400 lines ⇒ extract the option-chain section (~150 lines, `fetch_option_chain` + `_fetch_option_chain_serial` + `_OPT_NUMERIC_COLS`) into `data_pipeline/yf_option_chain.py` in the same commit |
+
 ## 3. Guardrails (how the score is kept)
 
 | Tool | Role | Run where |

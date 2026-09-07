@@ -102,6 +102,7 @@ app.py → routes/ → services/ → core/ → data_pipeline/ → utils/
 - `core/` is **pure computation**: no Flask, no DB, no network. Data in → numbers/DataFrames out.
 - `data_pipeline/` owns **every** I/O boundary: yfinance calls, SQLite, the scheduler.
 - Import direction is a hard invariant. `core/` and `data_pipeline/` must never import `services/`, `routes/`, or `app.py`; `data_pipeline/` must never import `core/`. Enforced by `doc_guard.py`'s `import-direction` rule.
+- Same-named modules across packages (`facade.py`, `models.py`, `greeks.py`, …) are a deliberate symmetry. Always reference them with the package-qualified path (`core/options/greeks.py`, never bare `greeks.py`) and always import via the full module path (`from core.options.greeks import …`) — in code review, logs, and docs alike.
 
 Because `core/` is pure, a new analytical feature is normally: add a pure function under `core/…`, add a thin orchestrator in `services/…`, expose a route. Never put pandas/numpy work in a route.
 
@@ -114,7 +115,7 @@ Each tab shell in the skeleton emits an HTMX placeholder (`hx-get="/render/<kind
 All four `/render/<kind>` routes funnel into **`services/market/dispatch.py::render_streaming_slice`** (moved out of `utils/` so utils stays a leaf layer). It:
 1. reads `job`/`ticker` from the query string;
 2. **auto-bootstraps a synthetic job** with defaults when `job` is missing (direct URL / refresh / bookmark) instead of erroring;
-3. dispatches via the `_RENDER_KIND_SLICES` table, which maps kind → `(AnalysisService method name, fragment template)`. Attribute names are stored as *strings* and late-bound with `getattr` so test monkey-patches are honoured. `options_chain` is special-cased to call `OptionsChainService.generate_options_chain_analysis` directly (it needs no `MarketAnalyzer`);
+3. dispatches via the `_RENDER_KIND_SLICES` table, which maps kind → `(AnalysisService method name, fragment template)`. Attribute names are stored as *strings* and late-bound with `getattr` so test monkey-patches are honoured. `options_chain` maps to `AnalysisService.generate_options_chain_slice`, which forwards to `OptionsChainService.generate_options_chain_analysis` (it needs no `MarketAnalyzer`);
 4. memoises the result per `(job_id, ticker, kind)` through `compute_or_get`, so a re-render is free;
 5. calls `close_thread_conn()` in a `finally` to avoid leaking the thread-local SQLite connection;
 6. merges `{**form_data, "ticker": …, **slice_result}` and renders `templates/partials/fragments/<kind>.html`.

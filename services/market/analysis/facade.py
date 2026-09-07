@@ -5,6 +5,7 @@ import logging
 
 from core.market.analyzer import MarketAnalyzer
 from services.market.facade import MarketService
+from services.options.chain import OptionsChainService
 from utils.date_helpers import exclusive_month_end
 
 from .assessment import _generate_assessment
@@ -106,6 +107,16 @@ class AnalysisService:
         except Exception as e:
             logger.error("assessment slice failed for %s: %s", form_data.get("ticker"), e, exc_info=True)
             return {"assessment_error": str(e)}
+
+    @staticmethod
+    def generate_options_chain_slice(form_data: dict) -> dict:
+        """Slice for /render/options_chain — no MarketAnalyzer needed."""
+        ticker = form_data.get("ticker", "")
+        try:
+            return OptionsChainService.generate_options_chain_analysis(ticker) or {}
+        except Exception as e:
+            logger.error("options_chain slice failed for %s: %s", ticker, e, exc_info=True)
+            return {"oc_error": str(e)}
 
     @staticmethod
     def calculate_position_size(

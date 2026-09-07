@@ -1,6 +1,7 @@
 """Flask Blueprints for OptionLab HTTP routes.
 
-Thin routing layer — each blueprint delegates to services/core modules.
+Thin routing layer — each blueprint delegates to services/data_pipeline/utils
+only (routes must never import core directly; enforced by doc_guard).
 App.py registers these blueprints and remains the single import point
 for test fixtures.
 """
