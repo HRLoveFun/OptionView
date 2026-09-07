@@ -25,6 +25,21 @@
 - **已落地改动**：<经确认写入的文件与摘要；未确认的标注"待确认">
 ```
 
+### 2026-09-07 OptionLab 全库回顾
+- **输入**：模式=<全库>；范围=<app.py, routes, services, core, data_pipeline, utils, scripts, static, templates, tests, site>；语言=<Python + JavaScript（推断）>；框架=<Flask + HTMX/Alpine + matplotlib + SQLite + yfinance；vitest/Playwright（推断）>；变更类型=<全库健康度>
+- **覆盖度**（全库模式）：深审=data_pipeline、services（32 文件全读）、期权模拟热路径（expiry.py/black_scholes/simulation/routes/options）、core/market（抽样）；跨切面 grep 扫描 100% 文件（static/templates/routes/utils/app.py 由跨切面代理覆盖）；scripts 仅 grep 扫描未深审；archive 未评审
+- **发现统计**：P0 0 / P1 7 / P2 16 / P3 12；疑点 6
+- **问题类型分布**：安全/限流键伪造 ×1；安全/入口参数直通 I/O 层 ×1；安全/条件性调试器暴露 ×1；架构/core 层运行时 I/O 依赖（有白名单妥协）×1；逻辑/失败状态被缓存 ×2（_range memo、job cache error memoisation）；逻辑/函数属性隐藏状态 ×1；逻辑/测试日期依赖 flaky ×1；一致性/前端契约改动未同步 e2e ×1；系统性/无界缓存 ×5 处；系统性/错误处理双轨制（str(e) 回显 + error-dict 键碎片化）；系统性/吞错静默降级 ×4 处
+- **误报**：core/market data_context import data_pipeline 初判 P0 → 实有 `doc-guard: allow=core-purity` 白名单标记且 doc_guard 通过，属文档化妥协，降 P1
+- **遗漏**：无（本轮无后续暴露）
+- **分级偏差**：npm audit 2 critical（vitest/vite）→ 定 P2 而非 P1，沿用上一轮口径：devDependencies、需 --ui 模式才可利用、无运行时调用点；app.py debug=True 初判 P0 → 生产入口是 gunicorn（deploy/Dockerfile、Render start command），app.py 仅为 dev 入口，降 P1
+- **改进建议**：
+  - [规则] performance-checklist 增补："缓存写入前区分成功/失败结果"模式（失败、error-dict、None 不应进入正向 TTL memo）
+  - [模式] "无界模块级 dict 缓存"模式（_query_cache/_rate_buckets/_option_chain_cache/_mr_cache/_all_conns 同构），写入 architecture-checklist 或 performance-checklist
+  - [模式] "前端可见性契约改动必须同步对应 e2e 断言"（visibility:hidden → opacity 淡出使 to_be_hidden 失效）
+  - [分级] devDependency 中的漏洞默认降一档（与上轮一致，已验证两次，考虑固化）
+- **已落地改动**：仅追加本记录；清单修改待用户确认
+
 ### 2026-09-07 EMSXView 全库回顾
 - **输入**：模式=<全库>；范围=<backend/api, frontend/src, CostView, platform_data, data_access, scripts, MarketView>；语言=<TypeScript + Python（推断）>；框架=<React 19 + Vite + shadcn/ui；FastAPI + Pydantic v2（推断）>；变更类型=<全库健康度>
 - **覆盖度**（全库模式）：深审=backend/api（部分精读）、frontend costview、platform_data/data_access、CostView monitoring；抽样=execution store、MarketView router、scripts；跨切面 grep 扫描 100% 文件
