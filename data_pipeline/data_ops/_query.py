@@ -20,12 +20,16 @@ def get_cleaned_daily(ticker: str, start: dt.date | None = None, end: dt.date | 
     # facade imports this module, so reaching back up would be an import cycle.
     start = start or (dt.date.today() - dt.timedelta(days=365 * 5))
     end = end or dt.date.today()
-    _u.manual_update(ticker, days=7)
-    _r.ensure_range(ticker, start, end)
     cache_key = (ticker, "clean", str(start), str(end))
     cached = _g._cache_get(cache_key)
     if cached is not None:
+        # A live cache entry was written ≤ _QUERY_CACHE_TTL ago, right after an
+        # update/backfill cycle — skip the update checks entirely so repeat
+        # wide-range requests never re-enter the (potentially very slow)
+        # ensure_range path.
         return cached
+    _u.manual_update(ticker, days=7)
+    _r.ensure_range(ticker, start, end)
     init_db()
     df = fetch_df(
         "SELECT date, open, high, low, close, adj_close, volume FROM clean_prices WHERE ticker=? AND date>=? AND date<=?",
@@ -40,11 +44,11 @@ def get_processed(
 ) -> pd.DataFrame:
     start = start or (dt.date.today() - dt.timedelta(days=365 * 5))
     end = end or dt.date.today()
-    _u.manual_update(ticker, days=7)
     cache_key = (ticker, "processed", frequency, str(start), str(end))
     cached = _g._cache_get(cache_key)
     if cached is not None:
         return cached
+    _u.manual_update(ticker, days=7)
     init_db()
     df = fetch_df(
         "SELECT * FROM processed_prices WHERE ticker=? AND frequency=? AND date>=? AND date<=?",
@@ -57,11 +61,11 @@ def get_processed(
 def get_processed_data(ticker: str, start: dt.date, end: dt.date, frequency: str = "W") -> pd.DataFrame:
     """Get processed data including osc_high, osc_low, and other features."""
     try:
-        _u.manual_update(ticker, days=7)
         cache_key = (ticker, "processed", frequency, str(start), str(end))
         cached = _g._cache_get(cache_key)
         if cached is not None:
             return cached
+        _u.manual_update(ticker, days=7)
         init_db()
         df = fetch_df(
             "SELECT * FROM processed_prices WHERE ticker=? AND frequency=? AND date>=? AND date<=?",

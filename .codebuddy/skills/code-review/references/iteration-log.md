@@ -25,6 +25,19 @@
 - **已落地改动**：<经确认写入的文件与摘要；未确认的标注"待确认">
 ```
 
+### 2026-09-07 OptionLab 架构专项评审（第 2 轮，聚焦架构维度）
+- **输入**：模式=<全库（架构聚焦，optionlab-arch-review skill 编排）>；范围=<8 维评分体系>；语言=<Python + JavaScript（推断）>；框架=<Flask + HTMX + matplotlib + SQLite + yfinance（推断）>；变更类型=<全库健康度>
+- **覆盖度**（全库模式）：工具面=doc_guard（clean）+ arch_metrics --check（ok）+ 纯度测试 9 通过 + ruff/format 全绿；深审=routes/options.py、core/options/simulation/expiry.py、services/options/preload.py、scripts/build_pages_site.py、.github/workflows/pages.yml；跨切面 grep 扫描缓存豁免/ET 时区/site 漂移；pip-audit 未执行（工具未装）
+- **发现统计**：P0 0 / P1 1 / P2 3 / P3 3；疑点 1
+- **问题类型分布**：架构/构建不变量被提交物违反 ×1（site fork 将被 rmtree+copytree 覆盖）；一致性/文档漂移 ×2（CODEBUDDY.md 缺 services/market_review、str(e) 回显残留）；安全/devDeps 漏洞 ×1；可维护性/Py-JS 业务逻辑双实现 ×1；健壮性/参数转换裸抛 ×1；效率/过期缓存不回收 ×1；逻辑/时区不一致 ×1
+- **误报**：无（site/static/option_pricing_matrix.js 差异先疑为构建产物过期，经 build_pages_site.py rmtree+copytree 证据确认为真问题）
+- **遗漏**：上轮未发现 site fork 覆盖风险 → 原因：清单缺"构建脚本 rmtree 目标目录 vs 提交物包含独有文件"交叉检查模式
+- **分级偏差**：无
+- **改进建议**：
+  - [模式] architecture-checklist 增补："CI 构建会整体重建的目录中，提交物含构建产物之外的独有文件"为不变量违反信号（本次由 git log 定位到仅改 site/static 的修复提交确证）
+  - [分级] 维持"devDeps 漏洞降一档为 P2"口径（第 3 次验证一致，建议固化）
+- **已落地改动**：仅追加本记录；清单修改待用户确认
+
 ### 2026-09-07 OptionLab 全库回顾
 - **输入**：模式=<全库>；范围=<app.py, routes, services, core, data_pipeline, utils, scripts, static, templates, tests, site>；语言=<Python + JavaScript（推断）>；框架=<Flask + HTMX/Alpine + matplotlib + SQLite + yfinance；vitest/Playwright（推断）>；变更类型=<全库健康度>
 - **覆盖度**（全库模式）：深审=data_pipeline、services（32 文件全读）、期权模拟热路径（expiry.py/black_scholes/simulation/routes/options）、core/market（抽样）；跨切面 grep 扫描 100% 文件（static/templates/routes/utils/app.py 由跨切面代理覆盖）；scripts 仅 grep 扫描未深审；archive 未评审

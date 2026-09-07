@@ -1,6 +1,5 @@
 """Statistical analysis slice generation (scatter, correlation, volatility)."""
 
-import gc
 import logging
 
 from core.market.correlation_validator import CorrelationValidator
@@ -107,8 +106,6 @@ def _generate_statistical_analysis(analyzer, form_data):
         except Exception as e:
             chart_warnings.append("Correlation dynamics")
             logger.error(f"Error generating correlation charts: {e}", exc_info=True)
-        finally:
-            gc.collect()
 
         # Surface per-chart failures
         all_none = all(v is None for k, v in results.items() if k != "statistical_error")

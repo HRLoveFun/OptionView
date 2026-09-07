@@ -115,3 +115,62 @@ def test_static_assets_are_exempt_from_the_budget(monkeypatch):
     # Budget is exhausted, but static must still be routed (404 because the
     # file doesn't exist — the assertion is that it is *not* a 429).
     assert client.get("/static/does-not-exist.js").status_code == 404
+
+
+# ── X-Forwarded-For trust boundary ───────────────────────────────
+
+
+def _make_whoami_app() -> Flask:
+    app = Flask(__name__)
+
+    @app.get("/api/whoami")
+    def _whoami():
+        return {"ip": rate_limit_mod.client_ip()}
+
+    return app
+
+
+def test_client_ip_ignores_forwarded_header_by_default(monkeypatch):
+    """Direct listeners must not let clients pick their own throttle key."""
+    monkeypatch.delenv("TRUST_X_FORWARDED_FOR", raising=False)
+    client = _make_whoami_app().test_client()
+
+    resp = client.get("/api/whoami", headers={"X-Forwarded-For": "1.2.3.4, 5.6.7.8"})
+    assert resp.get_json()["ip"] != "1.2.3.4"
+    assert resp.get_json()["ip"] == "127.0.0.1"
+
+
+def test_client_ip_uses_forwarded_header_when_explicitly_trusted(monkeypatch):
+    monkeypatch.setenv("TRUST_X_FORWARDED_FOR", "1")
+    client = _make_whoami_app().test_client()
+
+    resp = client.get("/api/whoami", headers={"X-Forwarded-For": "1.2.3.4, 5.6.7.8"})
+    assert resp.get_json()["ip"] == "1.2.3.4"
+
+
+def test_forged_xff_cannot_reset_the_budget(monkeypatch):
+    """Rotating a forged X-Forwarded-For must not mint fresh per-IP budgets."""
+    monkeypatch.delenv("RATE_LIMIT_DISABLED", raising=False)
+    monkeypatch.delenv("TRUST_X_FORWARDED_FOR", raising=False)
+    monkeypatch.setenv("RATE_LIMIT_DEFAULT", "2 per minute")
+
+    app = _make_app()
+    assert install(app) is True
+
+    client = app.test_client()
+    for forged_ip in ("10.0.0.1", "10.0.0.2"):
+        assert client.get("/api/ping", headers={"X-Forwarded-For": forged_ip}).status_code == 200
+
+    # Budget exhausted under the real client IP — a third forged identity
+    # must NOT mint a fresh budget.
+    assert client.get("/api/ping", headers={"X-Forwarded-For": "10.0.0.3"}).status_code == 429
+
+
+def test_bucket_map_is_bounded(monkeypatch):
+    """Forged-IP floods must not grow the bucket map without limit."""
+    monkeypatch.setattr(rate_limit_mod, "_MAX_BUCKETS", 50)
+
+    for i in range(200):
+        rate_limit_mod.rate_limit(f"global:10.0.0.{i}", 10, 3600)
+
+    assert len(rate_limit_mod._rate_buckets) <= 50

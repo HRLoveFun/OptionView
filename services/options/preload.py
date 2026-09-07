@@ -91,6 +91,10 @@ def get_cached(ticker: str) -> dict[str, Any] | None:
         return None
     age = (dt.datetime.now() - cached["ts"]).total_seconds() / 60
     if age >= CACHE_TTL_MINUTES:
+        # Drop the expired entry: each payload is a full option chain (up to
+        # MBs) and would otherwise linger until the same ticker is preloaded
+        # again — unbounded growth on a long-lived process.
+        _option_chain_cache.pop(ticker, None)
         return None
     return cached["data"]
 

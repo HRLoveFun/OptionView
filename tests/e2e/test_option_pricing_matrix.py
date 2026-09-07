@@ -112,27 +112,31 @@ def test_option_pricing_matrix_toggles_hide_values(page: Page, live_server: str,
     expect(price).to_be_visible()
     expect(rate).to_be_visible()
 
-    # Hide prices — rates remain, so no hint is shown.
+    # Hide prices — the value fades to the 0.1 "ghost" opacity (CSS-only
+    # contract: the box stays reserved so remaining numbers keep their
+    # positions, see styles.css "Switchable visibility"). Rates remain, so
+    # no hint is shown.
     page.locator('[data-opm-toggle="price"]').click()
-    expect(price).to_be_hidden()
-    expect(rate).to_be_visible()
+    expect(price).to_have_css("opacity", "0.1")
+    expect(rate).to_have_css("opacity", "1")
     expect(page.locator("#opm-all-hidden")).to_be_hidden()
 
     # Hiding rates too leaves nothing to show → guidance appears.
     page.locator('[data-opm-toggle="premium"]').click()
+    expect(rate).to_have_css("opacity", "0.1")
     expect(page.locator("#opm-all-hidden")).to_be_visible()
 
     # Restore both.
     page.locator('[data-opm-toggle="premium"]').click()
     page.locator('[data-opm-toggle="price"]').click()
-    expect(price).to_be_visible()
+    expect(price).to_have_css("opacity", "1")
 
     # Call / Put are independent.
     page.locator('[data-opm-toggle="call"]').click()
-    expect(call_half).to_be_hidden()
-    expect(put_half).to_be_visible()
+    expect(call_half).to_have_css("opacity", "0.1")
+    expect(put_half).to_have_css("opacity", "1")
     page.locator('[data-opm-toggle="call"]').click()
-    expect(call_half).to_be_visible()
+    expect(call_half).to_have_css("opacity", "1")
 
     assert _app_errors(js_errors) == [], f"JS errors while toggling: {js_errors}"
 

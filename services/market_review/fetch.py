@@ -44,6 +44,9 @@ _mr_cache_lock = threading.Lock()
 # CONSTRAINT: prevents stale market-review data from being served indefinitely after market moves.
 _MR_CACHE_TTL = 300
 
+# Bound on distinct cache keys (each holds a full multi-ticker price panel).
+_MR_CACHE_MAX = 64
+
 
 def fetch_market_data(instrument: str, start_date=None, end_date=None):
     cache_key = (instrument, str(start_date), str(end_date))
@@ -53,6 +56,17 @@ def fetch_market_data(instrument: str, start_date=None, end_date=None):
             if time.monotonic() - ts < _MR_CACHE_TTL:
                 return cached_data.copy(), cached_returns.copy(), list(cached_display)
             del _mr_cache[cache_key]
+        # Bound growth: expired entries are only dropped on re-read of the same
+        # key, so unrevisited (instrument, start, end) combinations would
+        # otherwise accumulate forever. Shed to make room for this compute's
+        # eventual insert.
+        if len(_mr_cache) >= _MR_CACHE_MAX:
+            now_ts = time.monotonic()
+            for k in [k for k, v in _mr_cache.items() if (now_ts - v[0]) >= _MR_CACHE_TTL]:
+                del _mr_cache[k]
+            while len(_mr_cache) >= _MR_CACHE_MAX:
+                oldest = min(_mr_cache, key=lambda k: _mr_cache[k][0])
+                del _mr_cache[oldest]
 
     _benchmark_inverse = {v: k for k, v in BENCHMARKS.items()}
     if instrument in _benchmark_inverse:

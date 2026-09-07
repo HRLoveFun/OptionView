@@ -133,13 +133,21 @@ def render_dynamics(
 
 
 def _rolling_projections(series: pd.Series, rolling_window: int, risk_threshold: int) -> pd.Series:
-    """Calculate rolling projections using historical percentiles."""
+    """Calculate rolling projections using historical percentiles.
+
+    Vectorised equivalent of the former per-index Python loop: position i gets
+    the ``risk_threshold``-percentile of the trailing window
+    ``series.iloc[i - rolling_window : i]`` — strictly *before* i, so the
+    current value never leaks into its own projection. ``rolling(...).quantile``
+    includes the current point, hence the ``shift(1)``. NaNs inside a window
+    are skipped, matching ``Series.quantile`` semantics of the original loop.
+    """
+    if rolling_window < 1:
+        logger.warning("_rolling_projections: invalid rolling_window=%s — returning all-NaN", rolling_window)
+        return pd.Series(np.nan, index=series.index)
     percentile = risk_threshold / 100.0
-    projections = []
-    for i in range(len(series)):
-        if i < rolling_window:
-            projections.append(np.nan)
-        else:
-            historical_window = series.iloc[i - rolling_window : i]
-            projections.append(historical_window.quantile(percentile))
-    return pd.Series(projections, index=series.index)
+    projections = series.rolling(window=rolling_window, min_periods=1).quantile(percentile).shift(1)
+    # The loop produced NaN for the first `rolling_window` positions; the
+    # rolling path has partial-window values there, so mask them explicitly.
+    projections.iloc[:rolling_window] = np.nan
+    return projections

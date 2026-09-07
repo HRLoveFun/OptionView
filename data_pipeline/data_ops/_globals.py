@@ -15,6 +15,11 @@ _UPDATE_COOLDOWN = 60
 GAP_SCAN_DAYS = int(os.environ.get("GAP_SCAN_DAYS", "30"))
 _QUERY_CACHE_TTL = 60
 
+# CONSTRAINT: bound on the query cache — keys include user-supplied start/end
+# strings, and expired entries were previously only dropped when the same key
+# was re-read, so unrevisited keys accumulated forever on a long-lived process.
+_QUERY_CACHE_MAX = 256
+
 _update_locks: dict = {}
 _update_lock_mutex = threading.Lock()
 
@@ -35,6 +40,13 @@ def _cache_get(key: tuple) -> pd.DataFrame | None:
 def _cache_set(key: tuple, df: pd.DataFrame) -> None:
     with _query_cache_lock:
         _query_cache[key] = (time.monotonic(), df)
+        if len(_query_cache) > _QUERY_CACHE_MAX:
+            now = time.monotonic()
+            for k in [k for k, (ts, _) in _query_cache.items() if (now - ts) >= _QUERY_CACHE_TTL]:
+                del _query_cache[k]
+            while len(_query_cache) > _QUERY_CACHE_MAX:
+                oldest = min(_query_cache, key=lambda k: _query_cache[k][0])
+                del _query_cache[oldest]
 
 
 def _cache_invalidate(ticker: str) -> None:

@@ -21,7 +21,13 @@ _SENTINEL_MIN_DB_SPAN_DAYS = 365
 
 
 def ensure_range(ticker: str, start: dt.date, end: dt.date) -> bool:
-    """Ensure clean_prices covers [start, end]."""
+    """Ensure clean_prices covers [start, end].
+
+    NOTE: only *successful* coverage is memoised. Memoising a failure would
+    make every caller within the TTL believe the range is covered and silently
+    serve missing data (the memo has no ok/failure flag, and the in-flight
+    dedup prevents followers from re-triggering the backfill).
+    """
     from utils.ticker_utils import is_valid_ticker_format
 
     if not is_valid_ticker_format(ticker):
@@ -129,8 +135,7 @@ def _ensure_range_impl(ticker: str, start: dt.date, end: dt.date, now: float, wa
                 logger.warning(
                     "ensure_range download failed for %s chunk %s..%s: %s", ticker, chunk_start, chunk_end, dl.error
                 )
-                with _ensure_range_lock:
-                    _ensure_range_memo[ticker] = (now, start, end)
+                # Deliberately NOT memoised: callers must be able to retry.
                 return False
             if chunk_start <= fetch_start:
                 break
@@ -138,14 +143,10 @@ def _ensure_range_impl(ticker: str, start: dt.date, end: dt.date, now: float, wa
         cl = _cl.clean_range(ticker, fetch_start, fetch_end)
         if not cl.ok:
             logger.warning("ensure_range cleaning failed for %s: %s", ticker, cl.error)
-            with _ensure_range_lock:
-                _ensure_range_memo[ticker] = (now, start, end)
             return False
         pr = _pr.process_frequencies(ticker, fetch_start, fetch_end)
         if not pr.ok:
             logger.warning("ensure_range processing failed for %s: %s", ticker, pr.error)
-            with _ensure_range_lock:
-                _ensure_range_memo[ticker] = (now, start, end)
             return False
         from . import _globals as _g
 
@@ -155,6 +156,4 @@ def _ensure_range_impl(ticker: str, start: dt.date, end: dt.date, now: float, wa
         return True
     except Exception as e:
         logger.warning("ensure_range exception for %s: %s", ticker, e)
-        with _ensure_range_lock:
-            _ensure_range_memo[ticker] = (now, start, end)
         return False

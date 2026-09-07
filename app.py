@@ -108,4 +108,7 @@ app.register_blueprint(data_bp)
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5001))
-    app.run(host="0.0.0.0", port=port, debug=True)
+    # CONSTRAINT: Werkzeug's debugger (/console) can execute arbitrary Python.
+    # Never enable it implicitly on a 0.0.0.0 bind — opt in via FLASK_DEBUG.
+    debug = os.environ.get("FLASK_DEBUG", "").strip().lower() in ("1", "true", "yes")
+    app.run(host="0.0.0.0", port=port, debug=debug)

@@ -39,6 +39,10 @@ logger = logging.getLogger(__name__)
 _rate_buckets: dict[str, list[float]] = {}
 _rate_lock = threading.Lock()
 
+# Bound on the bucket map. Without it, forged client IPs (see client_ip) grow
+# the dict without limit — a memory-exhaustion vector on a single-process app.
+_MAX_BUCKETS = 10_000
+
 # Default global budget per client IP. Kept identical to the previously used
 # flask-limiter default so removing that dependency changed no behaviour.
 DEFAULT_RATE_LIMIT_SPEC = "120 per minute"
@@ -63,6 +67,28 @@ _WINDOW_SECONDS = {
 _SPEC_RE = re.compile(r"^(\d+)\s*(?:/|per)\s*(\d+\s+)?([a-z]+)$", re.IGNORECASE)
 
 
+def _prune_buckets(now: float, window_sec: int) -> None:
+    """Keep ``_rate_buckets`` under ``_MAX_BUCKETS``. Caller holds ``_rate_lock``.
+
+    Emergency-shed semantics: when at cap we first drop fully-expired
+    buckets, then evict the least-recently-hit ones. Buckets created under a
+    longer window may be evicted early — acceptable under an over-cap
+    emergency (worst case: that client gets a fresh budget). Evicts down to
+    one slot below the cap so the caller's insert stays within budget.
+    """
+    if len(_rate_buckets) < _MAX_BUCKETS:
+        return
+    for key in list(_rate_buckets):
+        live = [t for t in _rate_buckets[key] if (now - t) < window_sec]
+        if live:
+            _rate_buckets[key] = live
+        else:
+            del _rate_buckets[key]
+    while len(_rate_buckets) >= _MAX_BUCKETS:
+        oldest_key = min(_rate_buckets, key=lambda k: _rate_buckets[k][-1])
+        del _rate_buckets[oldest_key]
+
+
 def rate_limit(key: str, max_calls: int, window_sec: int) -> tuple[bool, int]:
     """Allow up to ``max_calls`` per ``window_sec`` per key.
 
@@ -71,6 +97,7 @@ def rate_limit(key: str, max_calls: int, window_sec: int) -> tuple[bool, int]:
     """
     now = time.monotonic()
     with _rate_lock:
+        _prune_buckets(now, window_sec)
         bucket = _rate_buckets.get(key, [])
         # Drop expired entries
         bucket = [t for t in bucket if (now - t) < window_sec]
@@ -102,11 +129,23 @@ def parse_rate_limit_spec(spec: str) -> tuple[int, int]:
     return max_calls, _WINDOW_SECONDS[unit] * multiplier
 
 
+def _trust_forwarded_header() -> bool:
+    """Whether X-Forwarded-For may be used as the throttle key.
+
+    SECURITY: direct listeners (``app.run`` / bare gunicorn) must NOT trust
+    this header — clients can forge it and rotate it per request, resetting
+    every per-IP budget. Only enable this when the app sits behind a proxy
+    that overwrites the header.
+    """
+    return os.environ.get("TRUST_X_FORWARDED_FOR", "").strip().lower() in ("1", "true", "yes")
+
+
 def client_ip() -> str:
-    """Return the client IP from X-Forwarded-For or remote_addr."""
-    fwd = request.headers.get("X-Forwarded-For", "")
-    if fwd:
-        return fwd.split(",")[0].strip()
+    """Return the client IP used as the throttle key."""
+    if _trust_forwarded_header():
+        fwd = request.headers.get("X-Forwarded-For", "")
+        if fwd:
+            return fwd.split(",")[0].strip()
     return request.remote_addr or "unknown"
 
 

@@ -37,6 +37,7 @@ from utils.constants import (
     DEFAULT_TICKER,
 )
 from utils.render_helpers import render_error_fragment
+from utils.ticker_utils import is_valid_ticker_format
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +66,14 @@ def render_streaming_slice(kind: str) -> Any:
     """
     job_id = request.args.get("job", "")
     ticker = (request.args.get("ticker", "") or "").upper()
+
+    # CONSTRAINT: the ticker comes straight from the query string. Without the
+    # format whitelist it flows into the data pipeline as an arbitrary string —
+    # an attacker-writable DB surface and a yfinance request amplifier (see
+    # utils/ticker_utils.py). The POST path and MarketService.validate_ticker
+    # already enforce this; the /render funnel must not be the hole.
+    if ticker and not is_valid_ticker_format(ticker):
+        return render_error_fragment(kind, "invalid ticker format", 400)
 
     # WHY: missing job_id ⇒ direct access (refresh / bookmark / shared link).
     # Auto-bootstrap with default form params so the user lands on a
